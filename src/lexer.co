@@ -10,6 +10,16 @@
 # Some potential ambiguity in the grammar has been avoided by
 # pushing some extra smarts into Lexer.
 
+sax = require 'sax'
+
+String.prototype.replace_all = function (f, r)
+  str = @
+  i = 0
+  until i = str.indexOf f, i is -1
+    str = str.replace f, r
+    i += r.length
+  String str
+
 exports import
   # `lex` is Lexer's one and only public method.
   lex: (
@@ -50,8 +60,11 @@ exports import
       case \\    then i += @doBackslash code, i
       case \' \" then i += @doString    code, i, c
       case \<
-        i += if \[ is code.charAt i+1
+        c2 = code.charAt i+1
+        i += if \[ is c2
         then @doWords   code, i
+        else if \a <= c2 <= \z or \A <= c2 <= \Z
+        then @doTags    code, i
         else @doLiteral code, i
       case \/
         switch code.charAt i+1
@@ -190,6 +203,76 @@ exports import
     str or @carp 'unterminated string'
     @strnum unlines string q, str.slice 1 -1
     @countLines(str)length
+
+  # Matches a tag literal.
+  doTags: (code, index, q) ->
+    parser = sax.parser true
+    depth = 0
+    parse = true
+    attributes = 0
+    
+    parser.onopentag = (node) ~>
+      if depth++
+        if attributes is 1
+          @token \}, ''
+          attributes := 0
+        else if attributes is 0
+          @token \STRNUM, 0
+        @token ',', ','
+        
+        if attributes is 2
+          @token \TERMINATOR, "\n"
+          attributes := 0
+        else
+          @token \INDENT, 2
+      
+      @token \ID, 'cE'
+      @token \CALL(, '('
+      @token \STRNUM, "'#{node.name}'"
+      @token ',', ','
+      for k, v in node.attributes
+        if attributes is 0
+          @token '{', '{'
+          attributes := 1
+        else
+          @token ',', ','
+        
+        @token \ID, k
+        @token ':', ':'
+        @token \STRNUM, if isNaN v*1 then '"'+v+'"' else String v
+
+    parser.onclosetag = (node) ~>
+      if attributes is 1
+        @token \}, ''
+        attributes := 0
+      @token \)CALL, \)CALL
+      if --depth is 0
+        parser.close!
+      
+    parser.ontext = (text) ~>
+      if text.trim!.length
+        if attributes is 1
+          @token '}', ''
+          attributes := 2
+        else if text.length
+          @token \STRNUM, 0
+        
+        @token ',', ','
+        @token \STRNUM, "'"+text.replace_all('\'', '\\\'')+"'"
+      else if text is "\n"
+        @token \DEDENT, 2
+
+    parser.onprocessinginstruction = (node) ~>
+      console.log 'TODO processing nodes', node
+
+    parser.onend = ->
+      parse := 0
+    
+    i = index
+    while parse is true
+      c = code.charAt i++
+      parser.write c
+    i - index
 
   # Matches heredocs, adjusting indentation to the correct level,
   # as they ignore indentation to the left.
