@@ -203,11 +203,10 @@ exports import
 
   # Matches a tag literal.
   doTags: (code, index, q) ->
-    parser = sax.parser true
     depth = 0
     parse = true
     attributes = 0
-    
+    parser = sax.parser true
     parser.onopentag = (node) ~>
       if depth++
         if attributes is 1
@@ -236,7 +235,14 @@ exports import
         
         @token \ID, k
         @token ':', ':'
-        @token \STRNUM, if isNaN v*1 then '"'+v+'"' else String v
+        
+        if isNaN v*1 
+          v = '"""'+v+'""""'
+          @doString v, 0, '"'
+        else
+          @token \STRNUM, String v
+        
+        
 
     parser.onclosetag = (node) ~>
       if attributes is 1
