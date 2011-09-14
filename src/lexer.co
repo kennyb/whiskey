@@ -12,14 +12,26 @@
 
 sax = require 'sax'
 
-String.prototype.replace_all = function (f, r)
-  str = @
-  i = 0
-  until i = str.indexOf f, i is -1
-    str = str.replace f, r
-    i += r.length
-  String str
+`
+String.prototype.replace_all = function(f, r) {
+  var  str = this,
+      i = str.indexOf(f),
+      inc = f.indexOf(r),
+      len;
 
+  if(i !== -1) {
+    inc = inc === -1 ? 0 : inc+1;
+    len = f.length;
+    do {
+      str = str.substr(0, i) + r + str.substr(i + len);
+
+      i = str.indexOf(f, i + inc);
+    } while(i !== -1);
+  }
+
+  return str;
+}
+`
 exports import
   # `lex` is Lexer's one and only public method.
   lex: (
@@ -59,18 +71,19 @@ exports import
       case \\n   then i += @doLine      code, i
       case \\    then i += @doBackslash code, i
       case \' \" then i += @doString    code, i, c
-      case \<
-        c2 = code.charAt i+1
-        i += if \a <= c2 <= \z or \A <= c2 <= \Z
-        then @doTags    code, i
       case \/
         switch code.charAt i+1
         case \* then i += @doComment code, i
         case \/ then i += @doHeregex code, i
         default      i += @doRegex code, i or @doLiteral code, i
       case \` then i += @doJS code, i
-      default i += @doIdentifier code, i or @doNumber code, i
-                or @doLiteral    code, i or @doSpace  code, i
+      default
+        c2 = code.charAt i+1
+        if c is \< and (\a <= c2 <= \z or \A <= c2 <= \Z)
+          i += @doTags code, i
+        else
+          i += @doIdentifier code, i or @doNumber code, i
+            or @doLiteral    code, i or @doSpace  code, i
     # Close up all remaining open blocks.
     @dedent @dent
     @carp "missing `#that`" if @closes.pop()
@@ -203,79 +216,116 @@ exports import
 
   # Matches a tag literal.
   doTags: (code, index, q) ->
-    depth = 0
+    xml_func = 'cE' #TODO: make this customizable
     parse = true
     attributes = 0
     parser = sax.parser true
-    parser.onopentag = (node) ~>
-      if depth++
-        if attributes is 1
-          @token \}, ''
-          attributes := 0
-        else if attributes is 0
-          @token \STRNUM, 0
-        @token ',', ','
-        
-        if attributes is 2
-          @token \TERMINATOR, "\n"
-          attributes := 0
+    depth = 0
+    scopes = [[]];
+    idx = index
+    add_scope = (token, opts) ->
+      if !token then return
+      scopes[depth].push token
+      last = scopes[depth].length-1
+      if opts and opts.code
+        if scopes[depth].code_start >= 0
+          scopes[depth].code_blocks.push last
+          scopes[depth].code_end = last
         else
-          @token \INDENT, 2
-      
-      @token \ID, 'cE'
-      @token \CALL(, '('
-      @token \STRNUM, "'#{node.name}'"
-      @token ',', ','
+          scopes[depth].code_blocks = [last]
+          scopes[depth].code_start = last
+
+    parser.onopentag = (node) ->
+      #console.log 'open', node
+      attributes = []
       for k, v in node.attributes
-        if attributes is 0
-          @token '{', '{'
-          attributes := 1
-        else
-          @token ',', ','
-        
-        @token \ID, k
-        @token ':', ':'
-        
-        if isNaN v*1 
-          v = '"""'+v+'""""'
-          @doString v, 0, '"'
-        else
-          @token \STRNUM, String v
-        
-        
-
-    parser.onclosetag = (node) ~>
-      if attributes is 1
-        @token \}, ''
-        attributes := 0
-      @token \)CALL, \)CALL
-      if --depth is 0
-        parser.close!
+        switch k
+        case 'class' then k = 'c'
+        case 'for' then k = 'f'
+        attributes.push [\ID, k], [':', ':']
+        attributes.push [\STRNUM, if isNaN v*1 then '"""'+v.trim!+'"""' else String v]
+        attributes.push [',', ',']
       
-    parser.ontext = (text) ~>
-      if text.trim!.length
-        if attributes is 1
-          @token '}', ''
-          attributes := 2
-        else if text.length
-          @token \STRNUM, 0
+      attributes.pop!
+      tokens = []
+      tokens.push [\ID, xml_func], [\CALL(, '(', callable: true], [\STRNUM, "'#{node.name}'"], [',', ',']
+      if attributes.length
+        tokens.push ['{', '{']
+        for a of attributes then tokens.push a
+        tokens.push ['}', '}']
+      else
+        tokens.push [\STRNUM, 0]
         
-        @token ',', ','
-        @token \STRNUM, "'"+text.replace_all('\'', '\\\'')+"'"
-      else if text is "\n"
-        @token \DEDENT, 2
+      add_scope {tokens: tokens}
+      if typeof scopes[++depth] is not \array
+        scopes[depth] = []
 
-    parser.onprocessinginstruction = (node) ~>
-      console.log 'TODO processing nodes', node
+    parser.onclosetag = (node) ->
+      #console.log 'close', node
+      depth--
+      prev = scopes[depth][*-1]
+      scope = scopes[depth+1]
+      if scope.length
+        if scope.code_start >= 0
+          if isNaN scope.code_end
+            throw new Error "unterminated code scope"
+          else
+            code_start = scope.code_start
+            code_end = scope.code_end
+            #scope[code_start] = "function(){var o=[];#{scope[code_start]}"
+            scope[code_start].unshift {tokens: [[\UNARY, \do], [\PARAM, '('], [\ID, 'o'], [')PARAM', ') ->'], [\INDENT, 1], [\ID, 'o'], [\ASSIGN, '= []'], [\TERMINATOR, '\n']]}
+            code_scope = scope.splice code_start+1, code_end-code_start
+            for v, i of code_scope
+              if i is code_scope.length-1
+                #scope[code_start] += "#{v};return o}()"
+                scope[code_start].push {tokens: [v, [\HURL, 'return'], [\ID, 'o']]}
+              else if scope.code_blocks.indexOf(i) is not -1
+                #scope[code_start] += "o.push(#{v});"
+                scope[code_start].push {tokens: [v, [\ID, 'o'], [\DOT, '.'], [\ID, \push], ['CALL(', '('], v, [')CALL', ')'], [\TERMINATOR, '\n']]}
+              else
+                #scope[code_start] += v
+                scope[code_start].push v
+        for s of scope
+          prev.tokens.push [',', ','], s
+        
+      #OPTIMIZE: if previous tokens are ',' and '0' then remove them
+      scopes[depth+1] = []
+      scopes[depth].push {tokens: [[')CALL', ')CALL']]}
+      if depth is 0 then parser.end!
 
-    parser.onend = ->
+    parser.ontext = (text) ~>
+      text = String text
+      if isNaN text*1
+        add_scope [\STRNUM, '"""'+text.trim!+'"""']
+      else
+        add_scope [\STRNUM, text]
+
+    parser.onprocessinginstruction = (node) ->
+      console.log 'code', node
+      /*
+      switch node.name
+      case '=' then add_scope node.body.trim!g
+      default then add_scope node.body.trim!, {code: 1}
+      */
+
+    parser.onend = ~>
       parse := 0
+      tokens = scopes[0]
+      i = 0
+      while i < tokens.length
+        s = tokens[i]
+        if s.tokens then tokens.splice.apply tokens, [i, 1].concat s.tokens
+        else i++
+      for t of tokens
+        if t.0 is \STRNUM and t.1.substr(0, 3) is '"""' then @doHeredoc t.1, 0, '"'
+        else @token.apply @, t
     
-    i = index
+    len = @tokens.length
     while parse is true
-      c = code.charAt i++
+      c = code.charAt idx++
       parser.write c
-    i - index
+    idx - index
+    
 
   # Matches heredocs, adjusting indentation to the correct level,
   # as they ignore indentation to the left.
