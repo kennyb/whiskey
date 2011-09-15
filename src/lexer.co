@@ -30,7 +30,17 @@ String.prototype.replace_all = function(f, r) {
   }
 
   return str;
-}
+};
+
+String.repeat = function(pattern, count) {
+    if (count < 1) return '';
+    var result = '';
+    while (count > 0) {
+        if (count & 1) result += pattern;
+        count >>= 1, pattern += pattern;
+    };
+    return result;
+};
 `
 exports import
   # `lex` is Lexer's one and only public method.
@@ -236,7 +246,6 @@ exports import
           scopes[depth].code_start = last
 
     parser.onopentag = (node) ->
-      #console.log 'open', node
       attributes = []
       for k, v in node.attributes
         switch k
@@ -254,76 +263,100 @@ exports import
         for a of attributes then tokens.push a
         tokens.push ['}', '}']
       else
-        tokens.push [\STRNUM, 0]
+        tokens.push [\STRNUM, \0]
         
       add_scope {tokens: tokens}
       if typeof scopes[++depth] is not \array
         scopes[depth] = []
 
-    parser.onclosetag = (node) ->
-      #console.log 'close', node
+    parser.onclosetag = (node) ~>
       depth--
       prev = scopes[depth][*-1]
       scope = scopes[depth+1]
       if scope.length
+        # this is unsupported old code, which converts random code blocks into push statements
         if scope.code_start >= 0
           if isNaN scope.code_end
             throw new Error "unterminated code scope"
           else
             code_start = scope.code_start
             code_end = scope.code_end
-            #scope[code_start] = "function(){var o=[];#{scope[code_start]}"
             scope[code_start].unshift {tokens: [[\UNARY, \do], [\PARAM, '('], [\ID, 'o'], [')PARAM', ') ->'], [\INDENT, 1], [\ID, 'o'], [\ASSIGN, '= []'], [\TERMINATOR, '\n']]}
             code_scope = scope.splice code_start+1, code_end-code_start
             for v, i of code_scope
               if i is code_scope.length-1
-                #scope[code_start] += "#{v};return o}()"
                 scope[code_start].push {tokens: [v, [\HURL, 'return'], [\ID, 'o']]}
               else if scope.code_blocks.indexOf(i) is not -1
-                #scope[code_start] += "o.push(#{v});"
                 scope[code_start].push {tokens: [v, [\ID, 'o'], [\DOT, '.'], [\ID, \push], ['CALL(', '('], v, [')CALL', ')'], [\TERMINATOR, '\n']]}
               else
-                #scope[code_start] += v
                 scope[code_start].push v
         for s of scope
           prev.tokens.push [',', ','], s
         
       #OPTIMIZE: if previous tokens are ',' and '0' then remove them
       scopes[depth+1] = []
-      scopes[depth].push {tokens: [[')CALL', ')CALL']]}
-      if depth is 0 then parser.end!
-
-    parser.ontext = (text) ~>
-      text = String text
-      if isNaN text*1
-        add_scope [\STRNUM, '"""'+text.trim!+'"""']
-      else
-        add_scope [\STRNUM, text]
-
-    parser.onprocessinginstruction = (node) ->
-      console.log 'code', node
-      /*
-      switch node.name
-      case '=' then add_scope node.body.trim!g
-      default then add_scope node.body.trim!, {code: 1}
-      */
-
-    parser.onend = ~>
-      parse := 0
-      tokens = scopes[0]
+      tokens = scopes[depth].concat [[')CALL', ')CALL']]
       i = 0
       while i < tokens.length
         s = tokens[i]
         if s.tokens then tokens.splice.apply tokens, [i, 1].concat s.tokens
         else i++
       for t of tokens
-        if t.0 is \STRNUM and t.1.substr(0, 3) is '"""' then @doHeredoc t.1, 0, '"'
-        else @token.apply @, t
-    
+        if t.0 is \STRNUM and typeof t.1 is 'string' and  t.1.substr(0, 3) is '"""'
+          @doHeredoc t.1, 0, '"'
+        else
+          @tokens.push t
+          #if t.eol then @token \DEDENT 0
+      if depth is 0 then parser.end!
+
+    parser.ontext = (text) ->
+      text = String text
+      tl = text.trimLeft!
+      tr = text.trim!
+      if diff = text.length - tl.length then @doLine text.substr(0, diff), 0
+      console.log "diff_l", diff
+      
+      if tr.length
+        if isNaN text*1
+          add_scope [\STRNUM, '"""'+tr+'"""']
+        else add_scope [\STRNUM, tr]
+      
+      if diff = tl.length - tr.length then @doLine tl.substr(-diff), 0
+      console.log "diff_r", diff
+
+    parser.onprocessinginstruction = (node) ~>
+      #console.log node
+      body = node.body.trim!
+      switch node.name
+      case '=' then add_scope [\STRNUM, '"""#{'+body+'}"""']
+      default
+        tabs  = heretabs body.replace LASTDENT, ''
+        console.log "tabs:", tabs
+        if tabs
+          console.log body
+          body = String.repeat(body.charAt(body.indexOf("\n")+1), tabs) + body
+          #console.log "'#{space}'"
+        #clone  = ^exports <<< {dent: tabs || 0}
+        nested = exports.tokenize body, {@line, +raw}
+        console.log "finished", nested
+        #for t, i of nested
+        #  t.1.=replace LASTDENT, '' if i+1 is nested.length
+        #  t.1 = detab t.1, tabs
+        #  t.1 = lchomp t.1 if i is 0
+        nested.shift() while nested.0?0 is \TERMINATOR
+        nested.pop() while nested[*-1]?0 is \TERMINATOR
+        console.log "nested" nested
+        add_scope {tokens: nested}
+
+    parser.onend = ~>
+      parse := 0
+      
     len = @tokens.length
     while parse is true
       c = code.charAt idx++
+      @countLines c
       parser.write c
+    console.log @tokens.slice len
     idx - index
     
 
