@@ -52,6 +52,7 @@ task \build 'build lib/ from src/' ->
   sources = for file of dir \src
     \src/ + file if ext.test file and file not of webs
   run [\-bco \lib]concat sources
+  run [\-bjc \package.co]
 
 task \build:full 'build twice and run tests' ->
   exec 'bin/coke build && bin/coke build && bin/coke test'
