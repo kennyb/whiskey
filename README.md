@@ -1,5 +1,6 @@
 # Coco
-is a [CoffeeScript](http://coffeescript.org) dialect that aims to be more radical and practical.
+is a [CoffeeScript](http://coffeescript.org) dialect
+that aims to be more radical and practical.
 
 ## Why
 On its way to hide JavaScript's bad parts, CoffeeScript has accumulated own quirks:
@@ -12,15 +13,17 @@ Coco tries to amend them, entwining good parts of both.
 ## Principles
 - Respect JavaScript/ECMAScript semantics.
 - Die for [DRY](http://en.wikipedia.org/wiki/Don%27t_repeat_yourself).
-- Performance over readability.
 - Perl over Ruby.
-- Less keywords, punctuations and runtime errors.
+- Fewer keywords, punctuations and runtime errors.
 
 ## Differences
-- [Additions](https://github.com/satyr/coco/wiki/additions)
 - [Improvements](https://github.com/satyr/coco/wiki/improvements)
 - [Incompatibilities](https://github.com/satyr/coco/wiki/incompatibilities)
 - [Side by Side Comparison](https://github.com/satyr/coco/wiki/side-by-side-comparison)
+
+## Documents
+- [Additions](https://github.com/satyr/coco/wiki/additions)
+- [Annotated Source](http://satyr.github.com/coco/src/)
 
 ## Installation
 
@@ -31,6 +34,32 @@ Coco tries to amend them, entwining good parts of both.
 `npm i coco`
 
 ## Changelog
+
+### 0.6.7
+- Fixed [coffee#1715](https://github.com/jashkenas/coffee-script/issues/1715) etc.
+- Trivial improvements.
+
+### 0.6.6
+- Added unary assignments: `!! = x` => `x = !!x`
+- Made `a? <<< b` short for `a <<< b if a?`.
+- Improved stack traces from directly run .co files.
+
+### 0.6.5
+- `case`/`of`/`instanceof` now works better with array slice.
+- `instanceof` now rejects invalid right operands.
+
+### 0.6.4
+- Unary operators now spread into an array operand: `+[a, b]` => `[+a, +b]`
+- `..` now points to the constructor under `class`.
+- _coke_ now works from subdirectories.
+  ([coffee#1687](https://github.com/jashkenas/coffee-script/issues/1687))
+
+### 0.6.3
+- Added pipe operator: `f! => g _` => `_ = f!; g _`
+- Fixed identifier lexing as per ES5.
+- Improved label handlings.
+- Helper functions are now declared last.
+  ([coffee#1638](https://github.com/jashkenas/coffee-script/issues/1638))
 
 ### 0.6.2
 - Added character ranges: `[\a to \d]` => `[\a \b \c \d]`

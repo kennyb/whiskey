@@ -11,8 +11,6 @@ or  true
 and null
 ?   false
 !?  true
-  and :  'property name'
-  andy!?  # nickname
   eq 3 1
      & 2
      | 3
@@ -224,6 +222,7 @@ eq -1, -true
 
 # Should space themselves when repeated.
 eq(+ +1, - -1)
+eq -1, - --[2]0
 
 
 ### `do`
@@ -311,6 +310,13 @@ q = r: s: \t
 o?p <<< q?r
 eq o.p.s, \t
 
+o = null
+eq o? <<< {4}, void
+
+o = {}
+eq o? <<< {4}, o
+eq 4 o.4
+
 
 ### {in,de}crement
 a = [0]
@@ -325,7 +331,6 @@ eq a.0 ++  -- a.0
 eq 1 i
 
 throws 'increment of undeclared variable "C" on line 1' -> Coco.compile 'C++'
-throws 'invalid increment on line 1' -> Coco.compile '++a[b, c]'
 throws 'invalid decrement on line 1' -> Coco.compile 'q.=p--'
 
 
@@ -387,6 +392,28 @@ o.c <?= 3
 o.d >?= 5
 o.d >?= 7
 eq o.c * o.d, 14
+
+
+### Pipe
+Array 0 => _.concat 1, 2
+        => _ <<<   {3: 4}
+        => eq '1,2,,4' "#_"
+
+String 0
+=> if _ then _+_ else _*_
+=> eq \00 _
+
+
+### Unary spread
+eq 'number,string' ''+ typeof do [Number, String]
+
+o = {2: [3 4], 5: 6}
+a = delete o[5 ...2]
+eq '6,3,4' "#a"
+eq 3 a.length
+ok o.2 is o.5 is void
+
+eq '8,9' ''+ -~[7 8]
 
 
 ### Overloaded
