@@ -1,19 +1,19 @@
 {
-  "name": "coco",
+  "name": "whiskey",
   "version": "0.6.7",
-  "description": "Unfancy CoffeeScript",
+  "description": "Inspired CoffeeScript",
   "keywords": [
     "language",
     "compiler",
     "coffeescript",
     "javascript"
   ],
-  "author": "satyr <murky.satyr@gmail.com> (http://satyr.github.com)",
-  "homepage": "http://satyr.github.com/coco/",
+  "author": "kenneth <kenny@unhosted.org> (http://kennyb.github.com)",
+  "homepage": "http://kennyb.github.com/whiskey/",
   "licenses": [
     {
       "type": "MIT",
-      "url": "https://github.com/satyr/coco/raw/master/LICENSE"
+      "url": "https://github.com/kennyb/whiskey/raw/master/LICENSE"
     }
   ],
   "engines": {
@@ -22,20 +22,19 @@
   "directories": {
     "lib": "./lib"
   },
-  "main": "./lib/coco",
+  "main": "./lib/whiskey",
   "bin": {
-    "coco": "./lib/command.js",
-    "coke": "./lib/coke.js"
+    "whiskey": "./lib/command.js"
   },
   "repository": {
     "type": "git",
-    "url": "git://github.com/satyr/coco.git"
+    "url": "git://github.com/kennyb/whiskey.git"
   },
   "dependencies": {
-    "sax": "0.2.3"
+    "sax": ">=0.2.3"
   },
   "devDependencies": {
-    "jison": "0.2.1",
-    "uglify-js": "1.0.6"
+    "jison": ">=0.2.1",
+    "uglify-js": ">=1.0.6"
   }
 }
